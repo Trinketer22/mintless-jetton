@@ -8,7 +8,7 @@ import { buff2bigint, getRandomInt, getRandomTon, randomAddress, testJettonInter
 import { Errors, Op } from '../wrappers/JettonConstants';
 import { readFile } from 'fs/promises';
 import { join } from 'path';
-import { computedGeneric, computeGasFee, getGasPrices } from '../gasUtils';
+import { calcStorageFee, computedGeneric, computeGasFee, getGasPrices, getStoragePrices, StorageStats } from '../gasUtils';
 
 type AirdropData = {
     amount: bigint,
@@ -98,6 +98,13 @@ describe('Claim tests', () => {
         testReceiver = await blockchain.treasury('receiver');
         airdropData = Dictionary.empty(Dictionary.Keys.Address(), airDropValue);
 
+        const _libs = Dictionary.empty(Dictionary.Keys.BigUint(256), Dictionary.Values.Cell());
+        _libs.set(BigInt(`0x${wallet_code.hash().toString('hex')}`), wallet_code);
+        const libs = beginCell().storeDictDirect(_libs).endCell();
+        blockchain.libs = libs;
+        let lib_prep = beginCell().storeUint(2,8).storeBuffer(wallet_code.hash()).endCell();
+        const jwallet_code = new Cell({ exotic:true, bits: lib_prep.bits, refs:lib_prep.refs});
+        //
         // const others = await blockchain.createWallets(10);
 
         airdropData.set(testReceiver.address, {
@@ -192,6 +199,10 @@ describe('Claim tests', () => {
         const claimPayload = JettonWallet.claimPayload(receiverProof);
         const userData     = airdropData.get(testReceiver.address)!;
         const transferAmount = getRandomTon(1, 99);
+
+
+        const smc = await blockchain.getContract(testJetton.address);
+        expect(smc.balance).toBe(0n);
         const res = await testJetton.sendTransfer(testReceiver.getSender(), toNano('1'),
                                                   transferAmount, deployer.address,
                                                   testReceiver.address, claimPayload, 1n);
@@ -209,10 +220,16 @@ describe('Claim tests', () => {
             body: (b) => testJettonInternalTransfer(b!, {
                 amount: transferAmount,
                 from: testReceiver.address
-            })
+            }),
+            success: true
         });
             
 
+        const storagePrices  = getStoragePrices(blockchain.config);
+        const storageStats = new StorageStats(1299, 3);
+        const minStorage   = calcStorageFee(storagePrices, storageStats, BigInt(5 * 365 * 24 * 3600));
+
+        expect(smc.balance).toEqual(minStorage);
         expect(await deployerJetton.getJettonBalance()).toEqual(transferAmount);
         expect(await testJetton.getJettonBalance()).toEqual(userData.amount - transferAmount);
         
