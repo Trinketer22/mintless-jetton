@@ -166,7 +166,11 @@ cell calculate_jetton_wallet_state_init_internal(slice owner_address, slice jett
             min_distance = distance;
             min_salt = salt;
         }
-        stop = (salt == ITERATION_NUM) | (min_distance == 0);
+        else {
+            min_distance = distance;
+            min_salt = salt;
+        }
+        stop = (salt == ITERATION_NUM) | (min_distance == -1);
     } until (stop);
     cell state_init = begin_cell()
         .store_uint(0, 2) ;; 0b00 - No split_depth; No special
