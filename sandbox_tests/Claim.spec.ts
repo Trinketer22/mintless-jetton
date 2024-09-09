@@ -1,4 +1,4 @@
-import { Address, beginCell, BitBuilder, Cell, Dictionary, DictionaryValue, exoticMerkleProof, exoticPruned, fromNano, toNano } from '@ton/core';
+import { Address, beginCell, BitBuilder, Cell, Dictionary, DictionaryValue, exoticMerkleProof, exoticPruned, fromNano, storeMessage, toNano } from '@ton/core';
 import { compile } from '@ton/blueprint';
 import { Blockchain, BlockchainSnapshot, EmulationError, SandboxContract, TreasuryContract, internal } from '@ton/sandbox';
 import '@ton/test-utils';
@@ -8,7 +8,8 @@ import { buff2bigint, getRandomInt, getRandomTon, randomAddress, testJettonInter
 import { Errors, Op } from '../wrappers/JettonConstants';
 import { readFile } from 'fs/promises';
 import { join } from 'path';
-import { calcStorageFee, computedGeneric, computeGasFee, getGasPrices, getStoragePrices, StorageStats } from '../gasUtils';
+import { calcStorageFee, collectCellStats, computedGeneric, computeFwdFeesVerbose, computeGasFee, getGasPrices, getMsgPrices, getStoragePrices, StorageStats } from '../gasUtils';
+import { findTransactionRequired } from '@ton/test-utils';
 
 type AirdropData = {
     amount: bigint,
@@ -83,6 +84,7 @@ describe('Claim tests', () => {
 
     let userWallet: (address: Address, root?: bigint) => Promise<SandboxContract<JettonWallet>>;
     let getContractData:(address: Address) => Promise<Cell>;
+    let minStorage: bigint;
     // Minimal transfer cost no claim
     const minimalTransfer = toNano('0.073225413');
     // Transfer compute phase gas
@@ -227,7 +229,7 @@ describe('Claim tests', () => {
 
         const storagePrices  = getStoragePrices(blockchain.config);
         const storageStats = new StorageStats(1299, 3);
-        const minStorage   = calcStorageFee(storagePrices, storageStats, BigInt(5 * 365 * 24 * 3600));
+        minStorage   = calcStorageFee(storagePrices, storageStats, BigInt(5 * 365 * 24 * 3600));
 
         expect(smc.balance).toEqual(minStorage);
         expect(await deployerJetton.getJettonBalance()).toEqual(transferAmount);
@@ -341,7 +343,7 @@ describe('Claim tests', () => {
             exitCode: Errors.not_enough_gas
         });
 
-        res = await testJetton.sendTransfer(testReceiver.getSender(), toNano('0.13'),
+        res = await testJetton.sendTransfer(testReceiver.getSender(), toNano('0.12'),
                                             1n, deployer.address,
                                             deployer.address, claimPayload, 1n);
 
@@ -382,15 +384,24 @@ describe('Claim tests', () => {
         const testSender = blockchain.sender(testAddress);
 
         const transferMessage = JettonWallet.transferMessage(1n, deployer.address,
-                                                             deployer.address,
+                                                             testAddress,
                                                              claimPayload, 1n);
-        let res = await blockchain.sendMessage(internal({
+        const msgPrices = getMsgPrices(blockchain.config, 0);
+        const outMsg = internal({
             to: testJetton.address,
             from: testAddress,
             body: transferMessage,
-            value: toNano('0.05'),
+            value: toNano('0.12'),
             stateInit: testJetton.init
-        }));
+        });
+        if(outMsg.info.type !== 'internal') {
+            throw new Error("no way");
+        }
+        const packed = beginCell().store(storeMessage(outMsg)).endCell();
+        const stats  = collectCellStats(packed, [], true);
+        const fee    = computeFwdFeesVerbose(msgPrices, stats.cells, stats.bits);
+        outMsg.info.forwardFee = fee.remaining;
+        let res = await blockchain.sendMessage(outMsg);
         /*
         let res = await testJetton.sendTransfer(testSender, toNano('0.13'), // Success value from previous case
                                                 1n, deployer.address,
@@ -412,27 +423,31 @@ describe('Claim tests', () => {
                                             deployer.address, claimPayload, 1n);
         */
 
-        res = await blockchain.sendMessage(internal({
-            to: testJetton.address,
-            from: testAddress,
-            body: transferMessage,
-            value: toNano('1'),
-            stateInit: testJetton.init
-        }));
+        outMsg.info.value.coins = toNano('1');
+        res = await blockchain.sendMessage(outMsg);
 
-        expect(res.transactions).toHaveTransaction({
+        const transferTx = findTransactionRequired(res.transactions,{
             on: testJetton.address,
             from: testAddress,
             op:Op.transfer,
             success: true,
         });
         expect(await deployerJetton.getJettonBalance()).toEqual(balanceBefore + 1n);
-        const claimTransferCompute = computedGeneric(res.transactions[1]);
+        const claimTransferCompute = computedGeneric(transferTx);
         const gasPrices = getGasPrices(blockchain.config, 0);
         const gasDelta  = claimTransferCompute.gasUsed - transferNoClaim;
         console.log(`Transfer additional gas:${gasDelta}`);
         console.log(`Just transfer:${minimalTransfer}`);
-        console.log(`Total claim + transfer cost ${fromNano(minimalTransfer + computeGasFee(gasPrices, gasDelta))}`);
+        const excess =  findTransactionRequired(res.transactions, {
+            on: testAddress,
+            from: deployerJetton.address,
+            op: Op.excesses
+        });
+        const excessMsg = excess.inMessage!;
+        if(excessMsg.info.type !== 'internal') {
+            throw new Error("No way");
+        }
+        console.log(`Claim + transfer cost:${fromNano(toNano('1') - excessMsg.info.value.coins)}`);
     });
     describe('Proofs', () => {
     it('should reject proof from different root', async () => {
