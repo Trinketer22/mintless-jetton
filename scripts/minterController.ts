@@ -2,16 +2,16 @@ import { checkJettonMinter } from '../wrappers/JettonMinterChecker';
 import { Address, beginCell, Cell, fromNano, OpenedContract, toNano } from '@ton/core';
 import { compile, NetworkProvider, UIProvider} from '@ton/blueprint';
 import { JettonMinter, jettonMinterConfigCellToConfig, JettonMinterConfigFull, jettonMinterConfigFullToCell } from '../wrappers/JettonMinter';
-import { promptBool, promptAmount, promptAddress, displayContentCell, getLastBlock, waitForTransaction, getAccountLastTx, promptToncoin, promptUrl, jettonWalletCodeFromLibrary } from '../wrappers/ui-utils';
+import { promptBool, promptAmount, promptAddress, displayContentCell, getLastBlock, waitForTransaction, getAccountLastTx, promptToncoin, promptUrl, jettonWalletCodeFromLibrary, promptBigInt } from '../wrappers/ui-utils';
 import {TonClient4} from "@ton/ton";
 import { fromUnits } from '../wrappers/units';
 let jettonMinterContract:OpenedContract<JettonMinter>;
 
-const adminActions  = ['Mint', 'Change admin', 'Drop admin', 'Change metadata', 'Upgrade' ];
+const adminActions  = ['Mint', 'Change admin', 'Drop admin', 'Update merkle root', 'Change metadata', 'Upgrade' ];
 const userActions   = ['Info', 'Top up', 'Claim admin', 'Quit'];
 let minterCode: Cell;
 let walletCode: Cell;
-let adminAddress: Address;
+let adminAddress: Address | null;
 let decimals: number;
 
 
@@ -21,14 +21,16 @@ const failedTransMessage = (ui:UIProvider) => {
 };
 
 const infoAction = async (provider:NetworkProvider, ui:UIProvider) => {
-    const jettonData = await jettonMinterContract.getJettonData();
+    const jettonFull = await jettonMinterContract.getFullConfig();
     ui.write("Jetton info:\n\n");
-    ui.write(`Admin:${jettonData.adminAddress}\n`);
-    ui.write(`Total supply:${fromNano(jettonData.totalSupply)}\n`);
-    ui.write(`Mintable:${jettonData.mintable}\n`);
+    ui.write(`Admin: ${jettonFull.admin}\n`);
+    ui.write(`Total supply: ${fromUnits(jettonFull.supply, decimals)}\n`);
+    // ui.write(`Mintable:${jettonData.mintable}\n`);
+    ui.write(`Merkle root: 0x${jettonFull.merkle_root.toString(16)}`);
     const displayContent = await ui.choose('Display content?', ['Yes', 'No'], (c: string) => c);
     if(displayContent == 'Yes') {
-        await displayContentCell(jettonData.content, ui);
+        const content = await jettonMinterContract.getContent();
+        await displayContentCell(content, ui);
     }
 };
 const topUpAction = async (provider: NetworkProvider, ui: UIProvider) => {
@@ -186,6 +188,11 @@ const updateData = async (oldData: Cell, ui: UIProvider) => {
     do {
         newConfig   = {...curConfig};
         let   updateWallet = false;
+        const updateMerkle = await promptBool(`Current merkle root:${curConfig.merkle_root.toString(16)}\nWant to change?`, ['Yes', 'No'], ui, true);
+        if(updateMerkle) {
+            newConfig.merkle_root = await promptBigInt('Enter new merkle root in hex or numeric form:', ui);
+            console.log("New merkle root:", curConfig.merkle_root.toString(16));
+        }
         const updateSupply = await promptBool(`Current supply:${fromNano(curConfig.supply)}\nWant to change?`, ['Yes', 'No'], ui, true);
         if(updateSupply)
             newConfig.supply   = await promptAmount('Enter new supply amount:', decimals, ui);
@@ -210,32 +217,26 @@ const updateData = async (oldData: Cell, ui: UIProvider) => {
             supply: newConfig.supply.toString(),
             admin: newConfig.admin.toString(),
             transfer_admin: newConfig.transfer_admin?.toString(),
+            merkle_root: `0x${newConfig.merkle_root.toString(16)}`,
             wallet_code: updateWallet ? "updated" : "preserved"
         }, null, 2)}\nIs it okay?`, ['Yes', 'No'], ui));
     } while(retry);
     return jettonMinterConfigFullToCell(newConfig);
 }
 const upgradeAction = async (provider: NetworkProvider, ui: UIProvider) => {
-    const api = provider.api() as TonClient4;
     let upgradeCode = await promptBool(`Would you like to upgrade code?\nSource from jetton-minter.fc will be used.`, ['Yes', 'No'], ui, true);
     let upgradeData = await promptBool(`Would you like to upgrade data?`, ['Yes', 'No'], ui, true);
 
-    const contractState = await api.getAccount(await getLastBlock(provider), jettonMinterContract.address);
+    const contractState = await jettonMinterContract.getState();
 
-    if(contractState.account.state.type !== 'active')
-        throw(Error("Upgrade is only possible for active contract"));
-
-    if(contractState.account.state.code === null)
-        throw(Error(`Something is wrong!\nActive contract has to have code`));
-
-    const dataBefore =  contractState.account.state.data ? Cell.fromBase64(contractState.account.state.data) : beginCell().endCell();
+    const dataBefore =  contractState.data;
     if(upgradeCode || upgradeData) {
-        const newCode = upgradeCode ? minterCode : Cell.fromBase64(contractState.account.state.code);
+        const newCode = upgradeCode ? minterCode : contractState.code;
         const newData = upgradeData ? await updateData(dataBefore, ui) : dataBefore;
         await jettonMinterContract.sendUpgrade(provider.sender(), newCode, newData, toNano('0.05'));
         const gotTrans = await waitForTransaction(provider,
                                                   jettonMinterContract.address,
-                                                  contractState.account.last!.lt,
+                                                  contractState.last!.lt.toString(),
                                                   10);
         if(gotTrans){
             ui.write("Contract upgraded successfully!");
@@ -247,6 +248,31 @@ const upgradeAction = async (provider: NetworkProvider, ui: UIProvider) => {
     }
     else {
         ui.write('Nothing to do then!');
+    }
+}
+
+const updateMerkleRoot = async (provider: NetworkProvider, ui: UIProvider) => {
+    const contractState = await jettonMinterContract.getState();
+
+
+    const codeBefore = contractState.code;
+    const dataBefore = contractState.data;
+    const curConfig  = jettonMinterConfigCellToConfig(dataBefore);
+    const newMerkle  = await promptBigInt('Enter new merkle root in hex or numeric form:', ui);
+
+    curConfig.merkle_root = newMerkle;
+    const newData    = jettonMinterConfigFullToCell(curConfig);
+
+    await jettonMinterContract.sendUpgrade(provider.sender(), codeBefore, newData, toNano('0.05'));
+    const gotTrans = await waitForTransaction(provider,
+                                              jettonMinterContract.address,
+                                              contractState.last!.lt.toString(),
+                                              10);
+    if(gotTrans){
+        ui.write("Contract upgraded successfully!");
+    }
+    else {
+        failedTransMessage(ui);
     }
 }
 
@@ -295,7 +321,19 @@ export async function run(provider: NetworkProvider) {
             decimals     = verifyRes.decimals;
         }
         catch(e) {
-            retry = true;
+            ui.write(`Doesn't look like minter:${e}`);
+            if(!(await promptBool("Are you sure it is the one", ['Yes', 'No'], ui, true))) {
+                return;
+            }
+
+            jettonMinterContract = provider.open(
+                JettonMinter.createFromAddress(minterAddress)
+            );
+            adminAddress = await jettonMinterContract.getAdminAddress();
+            ui.write("Ok, boss!");
+            decimals = Number(
+                await promptAmount("Please specify contract decimals:", 0, ui)
+            );
         }
     } while(retry);
 
@@ -328,6 +366,9 @@ export async function run(provider: NetworkProvider) {
                 break;
             case 'Drop admin':
                 await dropAdminAction(provider, ui);
+                break;
+            case 'Update merkle root':
+                await updateMerkleRoot(provider, ui);
                 break;
             case 'Upgrade':
                 await upgradeAction(provider, ui);
