@@ -449,6 +449,7 @@ describe('Claim tests', () => {
         });
         expect(await deployerJetton.getJettonBalance()).toEqual(balanceBefore + 1n);
         const claimTransferCompute = computedGeneric(transferTx);
+        console.log("Claim transfer total gas:", claimTransferCompute.gasUsed);
         const gasDelta  = claimTransferCompute.gasUsed - transferNoClaim;
         console.log(`Transfer additional gas:${gasDelta}`);
         console.log(`Just transfer:${minimalTransfer}`);
