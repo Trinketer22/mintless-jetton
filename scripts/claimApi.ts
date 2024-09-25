@@ -143,11 +143,11 @@ const minterBuffer = fs.readFileSync('minter.json');
 const minterData = JSON.parse(minterBuffer.toString());
 const blockchain = await Blockchain.create();
 const testMinterCode = await compile('JettonMinterTest');
-const minterAddr = Address.parse(minterData);
+const minterAddr = Address.parse(minterData.address);
 await loadContracts([minterAddr], blockchain, testMinterCode);
 
 const minter = blockchain.openContract(
-    JettonMinterTest.createFromAddress(minterData.address)
+    JettonMinterTest.createFromAddress(minterAddr)
 );
 
 let wallet_code_raw = beginCell().endCell();
@@ -200,7 +200,7 @@ app.get('/wallet/:address', async (req: Request, res: Response) => {
 
     res.json({
         owner: owner.toRawString(),
-        jetton_wallet: jettonWalletContract.address.toRawString(),
+        jetton_wallet: (await minter.getWalletAddress(owner)).toRawString(),
         custom_payload,
         state_init: stateInit.toBoc().toString('base64'),
         compressed_info: {
