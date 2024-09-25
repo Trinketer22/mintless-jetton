@@ -1,6 +1,6 @@
 import { Address, beginCell, BitBuilder, Cell, Dictionary, DictionaryValue, exoticMerkleProof, exoticPruned, fromNano, storeMessage, toNano } from '@ton/core';
 import { compile } from '@ton/blueprint';
-import { Blockchain, BlockchainSnapshot, EmulationError, SandboxContract, TreasuryContract, internal } from '@ton/sandbox';
+import { Blockchain, BlockchainSnapshot, EmulationError, SandboxContract, TreasuryContract, internal, SendMessageResult } from '@ton/sandbox';
 import '@ton/test-utils';
 import {jettonContentToCell, JettonMinter} from '../wrappers/JettonMinter';
 import { JettonWallet, jettonWalletConfigToCell } from '../wrappers/JettonWallet';
@@ -9,7 +9,8 @@ import { Errors, Op } from '../wrappers/JettonConstants';
 import { readFile } from 'fs/promises';
 import { join } from 'path';
 import { calcStorageFee, collectCellStats, computedGeneric, computeFwdFeesVerbose, computeGasFee, getMsgPrices, getStoragePrices, StorageStats } from '../gasUtils';
-import { findTransactionRequired } from '@ton/test-utils';
+import { defaultConfig as latest_config} from '../defaultConfig';
+import { findTransaction, findTransactionRequired } from '@ton/test-utils';
 
 type AirdropData = {
     amount: bigint,
@@ -86,7 +87,7 @@ describe('Claim tests', () => {
     let getContractData:(address: Address) => Promise<Cell>;
     let minStorage: bigint;
     // Minimal transfer cost no claim
-    const minimalTransfer = toNano('0.074989413');
+    const minimalTransfer = toNano('0.034036415');// toNano('0.074989413');
     // Transfer compute phase gas
     const transferNoClaim = 30766n;
 
@@ -94,7 +95,7 @@ describe('Claim tests', () => {
         wallet_code = await compile('JettonWallet');
         minter_code = await compile('JettonMinter');
 
-        blockchain = await Blockchain.create();
+        blockchain = await Blockchain.create({config: Cell.fromBase64(latest_config)});
         blockchain.now = 1;
         deployer     = await blockchain.treasury('deployer');
         testReceiver = await blockchain.treasury('receiver');
@@ -342,7 +343,7 @@ describe('Claim tests', () => {
             exitCode: Errors.not_enough_gas
         });
 
-        res = await testJetton.sendTransfer(testReceiver.getSender(), toNano('0.12'),
+        res = await testJetton.sendTransfer(testReceiver.getSender(), toNano('0.05'),
                                             1n, deployer.address,
                                             deployer.address, claimPayload, 1n);
 
@@ -417,7 +418,7 @@ describe('Claim tests', () => {
             to: testJetton.address,
             from: testAddress,
             body: transferMessage,
-            value: toNano('0.12'),
+            value: toNano('0.05'),
             stateInit: testJetton.init
         });
         if(outMsg.info.type !== 'internal') {

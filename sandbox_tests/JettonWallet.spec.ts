@@ -9,6 +9,7 @@ import { randomAddress, getRandomTon, differentAddress, getRandomInt } from './u
 import { Op, Errors } from '../wrappers/JettonConstants';
 import { calcStorageFee, collectCellStats, computeFwdFees, computeFwdFeesVerbose, FullFees, GasPrices, getGasPrices, getMsgPrices, getStoragePrices, computedGeneric, storageGeneric, MsgPrices, setGasPrice, setMsgPrices, setStoragePrices, StorageStats, StorageValue, computeGasFee } from '../gasUtils';
 import { sha256 } from '@ton/crypto';
+import { defaultConfig as latest_config} from '../defaultConfig';
 
 /*
    These tests check compliance with the TEP-74 and TEP-89,
@@ -72,7 +73,7 @@ describe('JettonWallet', () => {
     beforeAll(async () => {
         jwallet_code_raw   = await compile('JettonWallet');
         minter_code    = await compile('JettonMinter');
-        blockchain     = await Blockchain.create();
+        blockchain     = await Blockchain.create({config: Cell.fromBase64(latest_config)});
         blockchain.now = Math.floor(Date.now() / 1000);
         deployer       = await blockchain.treasury('deployer');
         notDeployer    = await blockchain.treasury('notDeployer');
