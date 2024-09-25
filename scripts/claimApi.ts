@@ -10,7 +10,7 @@ import { mnemonicNew, mnemonicToPrivateKey } from "@ton/crypto";
 
 import '@ton/test-utils';
 import { Blockchain, createShardAccount } from '@ton/sandbox';
-import {jettonContentToCell} from '../wrappers/JettonMinter';
+import {jettonContentToCell, JettonMinter} from '../wrappers/JettonMinter';
 import { JettonMinterTest } from '../wrappers/JettonMinterTest';
 import { JettonWallet, jettonWalletConfigToCell } from '../wrappers/JettonWallet';
 import { buff2bigint} from '../sandbox_tests/utils';
@@ -81,7 +81,7 @@ const airDropValue: DictionaryValue<AirdropData> = {
         }
     }
 }
-async function loadContracts(addr_list: Address[], bc: Blockchain, testnet: boolean = false, api_key?: string) {
+async function loadContracts(addr_list: Address[], bc: Blockchain, override?: Cell, testnet: boolean = false, api_key?: string) {
     let subdomain = testnet ? 'testnet.' : '';
     const client = new TonClient({
         endpoint: `https://${subdomain}toncenter.com/api/v2/jsonRPC`,
@@ -102,7 +102,7 @@ async function loadContracts(addr_list: Address[], bc: Blockchain, testnet: bool
             throw new Error(`Account ${contract} has no data`);
         }
 
-        const code = Cell.fromBoc(state.code)[0];
+        const code = override ?? Cell.fromBoc(state.code)[0];
         const data = Cell.fromBoc(state.data)[0];
 
         contractsMap.set(contract.toRawString(), {
@@ -142,7 +142,10 @@ const minterBuffer = fs.readFileSync('minter.json');
 //parse json
 const minterData = JSON.parse(minterBuffer.toString());
 const blockchain = await Blockchain.create();
-await loadContracts([minterData.address], blockchain);
+const testMinterCode = await compile('JettonMinterTest');
+const minterAddr = Address.parse(minterData);
+await loadContracts([minterAddr], blockchain, testMinterCode);
+
 const minter = blockchain.openContract(
     JettonMinterTest.createFromAddress(minterData.address)
 );
