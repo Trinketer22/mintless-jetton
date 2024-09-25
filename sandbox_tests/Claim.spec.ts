@@ -465,6 +465,99 @@ describe('Claim tests', () => {
         }
         console.log(`Claim + transfer cost:${fromNano(toNano('1') - excessMsg.info.value.coins)}`);
     });
+    it('should work with minimal value', async () => {
+        const snapBefore = blockchain.snapshot();
+        const proofString = await readFile(join('sandbox_tests','proof'), {encoding: 'utf8'});
+        const parts = proofString.split(',');
+        const testAddress = Address.parse(parts[0]);
+        const newProof = Cell.fromBase64(parts[1]);
+        const newRoot  = buff2bigint(newProof.refs[0].hash(0));
+        const claimPayload = JettonWallet.claimPayload(newProof);
+
+        const testJetton = await userWallet(testAddress, newRoot);
+        const deployerJetton = await userWallet(deployer.address, newRoot);
+        let smc = await blockchain.getContract(deployerJetton.address);
+        const jettonBalanceBefore = smc.balance;
+        console.log('Deployer jetton TON balance before:', jettonBalanceBefore);
+        const balanceBefore  = await deployerJetton.getJettonBalance();
+
+        const transferMessage = JettonWallet.transferMessage(1n, deployer.address,
+                                                             testAddress,
+                                                             claimPayload, 1n);
+        const msgPrices = getMsgPrices(blockchain.config, 0);
+        let keepGoing = true;
+        let testValue = 62452801n;
+        let retryCount   = 0;
+        let failedFirst = false;
+        let res: SendMessageResult;
+        do {
+            const outMsg = internal({
+                to: testJetton.address,
+                from: testAddress,
+                body: transferMessage,
+                value: testValue,
+                stateInit: testJetton.init
+            });
+            if(outMsg.info.type !== 'internal') {
+                throw new Error("no way");
+            }
+            const packed = beginCell().store(storeMessage(outMsg)).endCell();
+            const stats  = collectCellStats(packed, [], true);
+            const fee    = computeFwdFeesVerbose(msgPrices, stats.cells, stats.bits);
+            outMsg.info.forwardFee = fee.remaining;
+            res = await blockchain.sendMessage(outMsg);
+            try {
+                expect(res.transactions).toHaveTransaction({
+                    from: testAddress,
+                    to: testJetton.address,
+                    op: Op.transfer,
+                    aborted: false,
+                });
+                keepGoing = false;
+            }
+            catch(e) {
+                // Check exact failure reason
+                expect(res.transactions).toHaveTransaction({
+                    from: testAddress,
+                    to: testJetton.address,
+                    op: Op.transfer,
+                    aborted: true,
+                    exitCode: Errors.not_enough_gas
+                });
+                failedFirst = true;
+                testValue += 1n;
+                retryCount++;
+                await blockchain.loadFrom(snapBefore);
+            }
+        } while(keepGoing);
+        expect(res.transactions).toHaveTransaction({
+            on: deployer.address,
+            from: deployerJetton.address,
+            op: Op.transfer_notification
+        });
+        const excess =  findTransaction(res.transactions, {
+            on: testAddress,
+            from: deployerJetton.address,
+            op: Op.excesses
+        });
+        if(excess) {
+            const inMsg = excess.inMessage!;
+            if(inMsg.info.type !== 'internal') {
+                throw new Error("No way");
+            }
+            console.log("Excess msg value:", inMsg.info.value.coins);
+        }
+
+        console.log("Got out with value:", testValue);
+        expect(failedFirst).toBe(true);
+        expect(retryCount).toBe(1);
+        expect(await deployerJetton.getJettonBalance()).toEqual(balanceBefore + 1n);
+        smc = await blockchain.getContract(deployerJetton.address);
+        console.log("Deployer jetton TON balance:", smc.balance);
+        const senderSmc = await blockchain.getContract(testJetton.address);
+        console.log("Sender jetton TON balance:", senderSmc.balance);
+        console.log("Min ton storage:", minStorage);
+    });
     describe('Proofs', () => {
     it('should reject proof from different root', async () => {
         const evilDude     = await blockchain.treasury('3v1l');
