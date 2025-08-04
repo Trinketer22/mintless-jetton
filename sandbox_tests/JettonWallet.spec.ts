@@ -853,8 +853,9 @@ describe('JettonWallet', () => {
             op: Op.transfer,
             success: true
         });
-        send_gas_fee = printTxGasStats("Jetton transfer", transferTx);
+        const acutualSendFee = printTxGasStats("Jetton transfer", transferTx);
         send_gas_fee = computeGasFee(gasPrices, 9255n);
+        expect(send_gas_fee).toBeGreaterThanOrEqual(acutualSendFee);
 
         const receiveTx = findTransactionRequired(sendResult.transactions, {
             on: notDeployerJettonWallet.address,
@@ -862,8 +863,9 @@ describe('JettonWallet', () => {
             op: Op.internal_transfer,
             success: true
         });
-        receive_gas_fee = printTxGasStats("Receive jetton", receiveTx);
+        const actualRecvFee = printTxGasStats("Receive jetton", receiveTx);
         receive_gas_fee = computeGasFee(gasPrices, 10355n);
+        expect(receive_gas_fee).toBeGreaterThanOrEqual(actualRecvFee);
 
         expect(await deployerJettonWallet.getJettonBalance()).toEqual(initialJettonBalance - sentAmount);
         expect(await notDeployerJettonWallet.getJettonBalance()).toEqual(initialJettonBalance2 + sentAmount);
