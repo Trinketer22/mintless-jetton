@@ -108,6 +108,10 @@ describe('JettonWallet', () => {
         console.log('jetton wallet code hash = ', jwallet_code.hash().toString('hex'));
         blockchain.now = Math.floor(Date.now() / 1000);
 
+        const confDict = Dictionary.loadDirect(Dictionary.Keys.Int(32), Dictionary.Values.Cell(), blockchain.config);
+        confDict.delete(45); // Remove precompiled
+        blockchain.setConfig(beginCell().storeDictDirect(confDict).endCell());
+
         jettonMinter   = blockchain.openContract(
                    JettonMinter.createFromConfig(
                      {
