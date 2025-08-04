@@ -160,7 +160,8 @@ describe('JettonWallet', () => {
             const curPrices = prices || msgPrices;
             const body = JettonMinter.forceTransferMessage(jetton_amount, mockAddr,
                                                            mockAddr, custom_payload,
-                                                           forward_amount, forward_payload);
+                                                           forward_amount, forward_payload, forward_amount + toNano('0.015'));
+
             const estimate = estimateBodyFee(body, false, curPrices);
             const reverse  = estimate.remaining * 65536n / (65536n - curPrices.firstFrac);
             expect(reverse).toBeGreaterThanOrEqual(estimate.total);
