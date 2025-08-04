@@ -8,7 +8,7 @@ import { compile } from '@ton/blueprint';
 import { randomAddress, getRandomTon, differentAddress, getRandomInt, testJettonTransfer, testJettonInternalTransfer, testJettonNotification, testJettonBurnNotification } from './utils';
 import { Op, Errors } from '../wrappers/JettonConstants';
 import { calcStorageFee, collectCellStats, computeCellForwardFees, computeFwdFees, computeFwdFeesVerbose, computeGasFee, computeMessageForwardFees, FullFees, GasPrices, getGasPrices, getMsgPrices, getStoragePrices, computedGeneric, storageGeneric, MsgPrices, setGasPrice, setMsgPrices, setStoragePrices, StorageStats, StorageValue } from '../gasUtils';
-import { sha256 } from 'ton-crypto';
+import { sha256 } from '@ton/crypto';
 
 /*
    These tests check compliance with the TEP-74 and TEP-89,
