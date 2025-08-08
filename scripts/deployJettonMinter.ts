@@ -8,7 +8,7 @@ export async function run(provider: NetworkProvider) {
     const isTestnet = provider.network() !== 'mainnet';
 
     const ui = provider.ui();
-    const jettonWalletCodeRaw = await compile('JettonWallet');
+    const jettonWalletCodeRaw = await compile('JettonWallet', {buildLibrary: false});
 
     const adminAddress = await promptUserFriendlyAddress("Enter the address of the jetton owner (admin):", ui, isTestnet);
 

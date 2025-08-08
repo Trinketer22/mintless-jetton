@@ -7,7 +7,7 @@ export async function run(provider: NetworkProvider) {
     const minterAddress = await promptAddress("Enter the address of the jetton minter:", ui);
 
     const minter = provider.open(JettonMinter.createFromAddress(minterAddress));
-    const rawWallet = await compile('JettonWallet');
+    const rawWallet = await compile('JettonWallet', {buildLibrary: false});
     const walletLib = jettonWalletCodeFromLibrary(rawWallet);
     const expHash   = rawWallet.hash().toString('hex');
 
@@ -21,7 +21,7 @@ export async function run(provider: NetworkProvider) {
     const isLibrary = walletCode.isExotic && walletCode.bits.length == 256 + 8 && walletCode.bits.substring(0, 8).toString() == '02';
 
     if(isLibrary) {
-        console.log("Minter wallet code is not a library but doesn't match expected code cell");
+        console.log("Minter wallet code is a library but doesn't match expected code cell");
         console.log("Expected code hash:", expHash);
         console.log("Got:", walletCode.bits.substring(8, walletCode.bits.length - 8).toString().toLowerCase());
     } else {

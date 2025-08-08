@@ -1,5 +1,5 @@
 import {compile, NetworkProvider} from '@ton/blueprint';
-import {jettonWalletCodeFromLibrary, promptBool, promptUrl, promptUserFriendlyAddress} from "../wrappers/ui-utils";
+import {promptBool, promptUrl, promptUserFriendlyAddress} from "../wrappers/ui-utils";
 import {checkJettonMinter} from "./JettonMinterChecker";
 
 export async function run(provider: NetworkProvider) {
@@ -8,8 +8,7 @@ export async function run(provider: NetworkProvider) {
     const ui = provider.ui();
 
     const jettonMinterCode = await compile('JettonMinter');
-    const jettonWalletCodeRaw = await compile('JettonWallet');
-    const jettonWalletCode = jettonWalletCodeFromLibrary(jettonWalletCodeRaw);
+    const jettonWalletCode = await compile('JettonWallet');
 
     const jettonMinterAddress = await promptUserFriendlyAddress("Enter the address of the jetton minter", ui, isTestnet);
 

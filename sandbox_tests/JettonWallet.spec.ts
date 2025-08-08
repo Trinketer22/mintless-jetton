@@ -81,7 +81,7 @@ describe('JettonWallet', () => {
 
 
     beforeAll(async () => {
-        jwallet_code_raw   = await compile('JettonWallet');
+        jwallet_code_raw   = await compile('JettonWallet', {buildLibrary: false});
         minter_code    = await compile('JettonMinter');
         blockchain     = await Blockchain.create();
         deployer       = await blockchain.treasury('deployer');

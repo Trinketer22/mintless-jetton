@@ -20,7 +20,7 @@ describe('State init tests', () => {
     beforeAll(async () => {
         blockchain = await Blockchain.create();
         deployer   = await blockchain.treasury('deployer');
-        jwallet_code_raw = await compile('JettonWallet');
+        jwallet_code_raw = await compile('JettonWallet', {buildLibrary: false});
         minter_code    = await compile('JettonMinter');
 
         //jwallet_code is library
