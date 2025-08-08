@@ -105,7 +105,8 @@ describe('JettonWallet', () => {
         jwallet_code = new Cell({ exotic:true, bits: lib_prep.bits, refs:lib_prep.refs});
 
         console.log('jetton minter code hash = ', minter_code.hash().toString('hex'));
-        console.log('jetton wallet code hash = ', jwallet_code.hash().toString('hex'));
+        console.log('jetton wallet library hash = ', jwallet_code.hash().toString('hex').padStart(64, '0'));
+        console.log('jetton wallet code hash    = ', jwallet_code_raw.hash().toString('hex').padStart(64, '0'));
         blockchain.now = Math.floor(Date.now() / 1000);
 
         const confDict = Dictionary.loadDirect(Dictionary.Keys.Int(32), Dictionary.Values.Cell(), blockchain.config);
