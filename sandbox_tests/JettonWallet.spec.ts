@@ -77,12 +77,12 @@ describe('JettonWallet', () => {
         blockchain.now = Math.floor(Date.now() / 1000);
         deployer       = await blockchain.treasury('deployer');
         notDeployer    = await blockchain.treasury('notDeployer');
-        walletStats    = new StorageStats(1299, 3);
+        walletStats    = new StorageStats(10627, 28);
         msgPrices      = getMsgPrices(blockchain.config, 0);
         gasPrices      = getGasPrices(blockchain.config, 0);
         storagePrices  = getStoragePrices(blockchain.config);
         storageDuration= 5 * 365 * 24 * 3600;
-        stateInitStats = new StorageStats(1197, 3);
+        stateInitStats = new StorageStats(10525, 28);
         defaultContent = {
                            uri: 'https://some_stablecoin.org/meta.json'
                        };
@@ -103,7 +103,7 @@ describe('JettonWallet', () => {
                    JettonMinter.createFromConfig(
                      {
                        admin: deployer.address,
-                       wallet_code: jwallet_code,
+                       wallet_code: jwallet_code_raw,
                        merkle_root: 0n, // We don't care about the claim here
                        jetton_content: jettonContentToCell(defaultContent)
                      },
@@ -763,7 +763,7 @@ describe('JettonWallet', () => {
             success: true
         });
         send_gas_fee = printTxGasStats("Jetton transfer", transferTx);
-        let mockGas = computeGasFee(gasPrices, 30766n);
+        let mockGas = computeGasFee(gasPrices, 30672n);
         expect(mockGas).toBeGreaterThanOrEqual(send_gas_fee)
         send_gas_fee = mockGas;
 
@@ -774,7 +774,7 @@ describe('JettonWallet', () => {
             success: true
         });
         receive_gas_fee = printTxGasStats("Receive jetton", receiveTx);
-        mockGas = computeGasFee(gasPrices, 32480n);
+        mockGas = computeGasFee(gasPrices, 32378n);
         expect(mockGas).toBeGreaterThanOrEqual(receive_gas_fee);
         receive_gas_fee = mockGas;
 
@@ -1054,7 +1054,7 @@ describe('JettonWallet', () => {
             const actualRecv   = printTxGasStats("Burn notification transaction", sendResult.transactions[2]);
             burn_gas_fee          = actualSent;
             burn_notification_fee = actualRecv;
-            burn_gas_fee = computeGasFee(gasPrices, 6148n);
+            burn_gas_fee = computeGasFee(gasPrices, 6038n);
             burn_notification_fee = computeGasFee(gasPrices, 28680n);
             expect(burn_gas_fee).toBeGreaterThanOrEqual(actualSent);
             expect(burn_notification_fee).toBeGreaterThanOrEqual(actualRecv);
